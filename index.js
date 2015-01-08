@@ -1,5 +1,6 @@
-var Address = require('bitcoinjs-lib').Address
-var networks = require('bitcoinjs-lib').networks
+var bitcoin = require('bitcoinjs-lib')
+var Address = bitcoin.Address
+var networks = bitcoin.networks
 var assert = require('assert')
 var Node = require('./node')
 
@@ -9,7 +10,8 @@ function TxGraph() {
 
 TxGraph.prototype.addTx = function(tx) {
   var id = tx.getId()
-  var node = this.findNodeById(id) || new Node(id)
+  var existing = findNodeById(id, this.heads)
+  var node = existing || new Node(id)
   if(node.nextNodes.length === 0 && this.heads.indexOf(node) < 0) {
     this.heads.push(node)
   }
@@ -34,6 +36,8 @@ TxGraph.prototype.addTx = function(tx) {
       node.prevNodes.push(prevNode)
     }
   }, this)
+
+  return !existing
 }
 
 TxGraph.prototype.getAllNodes = function() {
@@ -172,6 +176,8 @@ function assertEmptyNodes(nodes) {
 function assertNoneFundingNodes(nodes, addresses, network) {
   assert(nodes.every(function(node) {
       var outputAddresses = node.tx.outs.map(function(output) {
+        if (bitcoin.scripts.isNullDataOutput(output.script)) return;
+
         return Address.fromOutputScript(output.script, network).toString()
       })
       var partOfOutput = outputAddresses.some(function(address) {
@@ -241,6 +247,8 @@ function calculateFeeAndValue(tx, prevNodes, addresses, network) {
 
   function getOutputValue(output, addresses, network) {
     if(!addresses) return;
+
+    if (bitcoin.scripts.isNullDataOutput(output.script)) return 0;
 
     var toAddress = Address.fromOutputScript(output.script, network).toString()
     if(addresses.indexOf(toAddress) >= 0) {
